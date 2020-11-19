@@ -17,6 +17,10 @@ use App\Utils\{
 };
 use voku\helper\AntiXSS;
 use Psr\Http\Message\ResponseInterface;
+use Slim\Http\{
+    Request,
+    Response
+};
 
 /**
  *  LinkController
@@ -36,26 +40,28 @@ class LinkController extends BaseController
         return "couldn't alloc token";
     }
 
-    public static function GenerateSSRSubCode($userid, $without_mu)
+    /**
+     * @param int $userid
+     */
+    public static function GenerateSSRSubCode(int $userid): string
     {
-        $Elink = Link::where('type', 11)->where('userid', $userid)->where('geo', $without_mu)->first();
+        $Elink = Link::where('userid', $userid)->first();
         if ($Elink != null) {
             return $Elink->token;
         }
-        $NLink = new Link();
-        $NLink->type = 11;
-        $NLink->address = '';
-        $NLink->port = 0;
-        $NLink->ios = 0;
-        $NLink->geo = $without_mu;
-        $NLink->method = '';
+        $NLink         = new Link();
         $NLink->userid = $userid;
-        $NLink->token = self::GenerateRandomLink();
+        $NLink->token  = self::GenerateRandomLink();
         $NLink->save();
 
         return $NLink->token;
     }
 
+    /**
+     * @param Request   $request
+     * @param Response  $response
+     * @param array     $args
+     */
     public static function GetContent($request, $response, $args)
     {
         if (!$_ENV['Subscribe']) {
@@ -64,13 +70,12 @@ class LinkController extends BaseController
 
         $token = $args['token'];
 
-        //$builder->getPhrase();
-        $Elink = Link::where('type', 11)->where('token', $token)->first();
+        $Elink = Link::where('token', $token)->first();
         if ($Elink == null) {
             return null;
         }
 
-        $user = User::where('id', $Elink->userid)->first();
+        $user = $Elink->getUser();
         if ($user == null) {
             return null;
         }
@@ -132,7 +137,7 @@ class LinkController extends BaseController
                     $opts['sub'] = 3;
                     break;
                 case 3:
-                    $opts['ssd'] = 1;
+                    $opts['ssd'] = 1; //deprecated
                     break;
                 case 4:
                     $opts['clash'] = 1;
@@ -145,14 +150,14 @@ class LinkController extends BaseController
 
         $getBody = '';
 
-        $sub_type_array = ['list', 'ssd', 'clash', 'surge', 'surfboard', 'quantumult', 'quantumultx', 'sub'];
+        $sub_type_array = ['list', 'clash', 'surge', 'surfboard', 'quantumult', 'quantumultx', 'sub'];
         foreach ($sub_type_array as $key) {
             if (isset($opts[$key])) {
                 $query_value = $opts[$key];
                 if ($query_value != '0' && $query_value != '') {
 
                     // 兼容代码开始
-                    if ($key == 'sub' && $query_value > 3) {
+                    if ($key == 'sub' && $query_value > 4) {
                         $query_value = 1;
                     }
                     // 兼容代码结束
@@ -212,13 +217,6 @@ class LinkController extends BaseController
                     'class'    => 'Lists'
                 ];
                 break;
-            case 'ssd':
-                $return = [
-                    'filename' => 'SSD',
-                    'suffix'   => 'txt',
-                    'class'    => 'SSD'
-                ];
-                break;
             case 'ssr':
                 $return = [
                     'filename' => 'SSR',
@@ -227,13 +225,14 @@ class LinkController extends BaseController
                 ];
                 break;
             case 'sub':
-                if ($value == 3) {
-                    $return = self::getSubscribeExtend('v2rayn');
-                } elseif ($value == 2) {
-                    $return = self::getSubscribeExtend('ss');
-                } else {
-                    $return = self::getSubscribeExtend('ssr');
-                }
+                $strArray = [
+                    1 => 'ssr',
+                    2 => 'ss',
+                    3 => 'v2rayn',
+                    4 => 'trojan',
+                ];
+                $str = (!in_array($value, $strArray) ? $strArray[$value] : $strArray[1]);
+                $return = self::getSubscribeExtend($str);
                 break;
             case 'clash':
                 if ($value !== null) {
@@ -437,16 +436,16 @@ class LinkController extends BaseController
         if ($int == 0) {
             $int = '';
         }
-        $userapiUrl = $_ENV['subUrl'] . self::GenerateSSRSubCode($user->id, 0);
+        $userapiUrl = $_ENV['subUrl'] . self::GenerateSSRSubCode($user->id);
         $return_info = [
             'link'            => '',
             // sub
             'ss'              => '?sub=2',
             'ssr'             => '?sub=1',
             'v2ray'           => '?sub=3',
+            'trojan'          => '?sub=4',
             // apps
             'ssa'             => '?list=ssa',
-            'ssd'             => '?ssd=1',
             'clash'           => '?clash=1',
             'clash_provider'  => '?list=clash',
             'clashr'          => '?clash=2',
@@ -497,9 +496,10 @@ class LinkController extends BaseController
                 $return = AppURI::getClashURI($item, true);
                 break;
             case 'v2rayn':
-                $item['ps'] = $item['remark'];
-                $item['type'] = $item['headerType'];
-                $return = 'vmess://' . base64_encode(json_encode($item, 320));
+                $return = AppURI::getV2RayNURI($item);
+                break;
+            case 'trojan':
+                $return = AppURI::getTrojanURI($item);
                 break;
             case 'kitsunebi':
                 $return = AppURI::getKitsunebiURI($item);
@@ -604,6 +604,9 @@ class LinkController extends BaseController
             'aid'             => 0,
             'net'             => 'tcp',
             'headerType'      => 'none',
+            'host'            => '',
+            'path'            => '/',
+            'tls'             => '',
             'protocol'        => 'origin',
             'protocol_param'  => '',
             'obfs'            => 'plain',
@@ -617,6 +620,9 @@ class LinkController extends BaseController
             $Extend['remark'] = $remark;
             if (in_array($list, ['kitsunebi', 'quantumult', 'v2rayn'])) {
                 $Extend['type'] = 'vmess';
+                $out = self::getListItem($Extend, $list);
+            } elseif ($list == 'trojan') {
+                $Extend['type'] = 'trojan';
                 $out = self::getListItem($Extend, $list);
             } elseif ($list == 'ssr') {
                 $Extend['type'] = 'ssr';
@@ -819,63 +825,6 @@ class LinkController extends BaseController
     }
 
     /**
-     * SSD 订阅
-     *
-     * @param User  $user 用户
-     * @param int   $ssd  订阅类型
-     * @param array $opts request
-     * @param array $Rule 节点筛选规则
-     *
-     * @return string
-     */
-    public static function getSSD($user, $ssd, $opts, $Rule)
-    {
-        if (!URL::SSCanConnect($user)) {
-            return null;
-        }
-        $array_all                  = [];
-        $array_all['airport']       = $_ENV['appName'];
-        $array_all['port']          = $user->port;
-        $array_all['encryption']    = $user->method;
-        $array_all['password']      = $user->passwd;
-        $array_all['traffic_used']  = Tools::flowToGB($user->u + $user->d);
-        $array_all['traffic_total'] = Tools::flowToGB($user->transfer_enable);
-        $array_all['expiry']        = $user->class_expire;
-        $array_all['url']           = self::getSubinfo($user, 0)['ssd'];
-        $plugin_options             = '';
-        if (strpos($user->obfs, 'http') != false) {
-            $plugin_options = 'obfs=http';
-        }
-        if (strpos($user->obfs, 'tls') != false) {
-            $plugin_options = 'obfs=tls';
-        }
-        if ($plugin_options != '') {
-            $array_all['plugin'] = 'simple-obfs';
-            $array_all['plugin_options'] = $plugin_options;
-            if ($user->obfs_param != '') {
-                $array_all['plugin_options'] .= ';obfs-host=' . $user->obfs_param;
-            }
-        }
-        $array_server = [];
-        $server_index = 1;
-        $Rule['type'] = 'ss';
-        $nodes = URL::getNew_AllItems($user, $Rule);
-        foreach ($nodes as $item) {
-            if ($item['type'] != 'ss') continue;
-            $server = AppURI::getSSDURI($item);
-            if ($server !== null) {
-                $server['id'] = $server_index;
-                $array_server[] = $server;
-                $server_index++;
-            }
-        }
-        $array_all['servers'] = $array_server;
-        $json_all = json_encode($array_all, 320);
-
-        return 'ssd://' . base64_encode($json_all);
-    }
-
-    /**
      * 通用订阅，ssr & v2rayn
      *
      * @param User   $user 用户
@@ -896,6 +845,10 @@ class LinkController extends BaseController
             case 3: // V2
                 $Rule['type'] = 'vmess';
                 $getListExtend = $Rule['extend'] ? self::getListExtend($user, 'v2rayn') : [];
+                break;
+            case 4: // Trojan
+                $Rule['type'] = 'trojan';
+                $getListExtend = $Rule['extend'] ? self::getListExtend($user, 'trojan') : [];
                 break;
             default: // SSR
                 $Rule['type'] = 'ssr';

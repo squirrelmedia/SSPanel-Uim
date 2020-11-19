@@ -31,6 +31,7 @@ use App\Models\{
     DetectRule,
     TrafficLog,
     InviteCode,
+    EmailVerify,
     UserSubscribeLog
 };
 use App\Utils\{
@@ -38,6 +39,7 @@ use App\Utils\{
     Pay,
     URL,
     Hash,
+    Check,
     QQWry,
     Tools,
     Radius,
@@ -58,7 +60,7 @@ class UserController extends BaseController
 {
     public function index($request, $response, $args)
     {
-        $ssr_sub_token = LinkController::GenerateSSRSubCode($this->user->id, 0);
+        $ssr_sub_token = LinkController::GenerateSSRSubCode($this->user->id);
 
         $GtSdk = null;
         $recaptcha_sitekey = null;
@@ -399,288 +401,6 @@ class UserController extends BaseController
         return $response->withStatus(302)->withHeader('Location', '/user/edit');
     }
 
-    public function nodeAjax($request, $response, $args)
-    {
-        $id = $args['id'];
-        $point_node = Node::find($id);
-        $prefix = explode(' - ', $point_node->name);
-        return $this->view()->assign('point_node', $point_node)->assign('prefix', $prefix[0])->assign('id', $id)->display('user/nodeajax.tpl');
-    }
-
-    public function node($request, $response, $args)
-    {
-        $user = Auth::getUser();
-        $nodes = Node::where('type', 1)->orderBy('node_class')->orderBy('name')->get();
-        $relay_rules = Relay::where('user_id', $this->user->id)->orwhere('user_id', 0)->orderBy('id', 'asc')->get();
-        if (!Tools::is_protocol_relay($user)) {
-            $relay_rules = array();
-        }
-
-        $array_nodes = array();
-        $nodes_muport = array();
-        $db = new DatatablesHelper();
-        $infoLogs = $db->query('SELECT * FROM ( SELECT * FROM `ss_node_info` WHERE log_time > ' . (time() - 300) . ' ORDER BY id DESC LIMIT 999999999999 ) t GROUP BY node_id ORDER BY id DESC');
-        $onlineLogs = $db->query('SELECT * FROM ( SELECT * FROM `ss_node_online_log` WHERE log_time > ' . (time() - 300) . ' ORDER BY id DESC LIMIT 999999999999 ) t GROUP BY node_id ORDER BY id DESC');
-
-        foreach ($nodes as $node) {
-            if ($user->is_admin == 0 && $node->node_group != $user->node_group && $node->node_group != 0) {
-                continue;
-            }
-            if ($node->sort == 9) {
-                $mu_user = User::where('port', '=', $node->server)->first();
-                $mu_user->obfs_param = $this->user->getMuMd5();
-                $nodes_muport[] = array('server' => $node, 'user' => $mu_user);
-                continue;
-            }
-            $array_node = array();
-
-            $array_node['id'] = $node->id;
-            $array_node['class'] = $node->node_class;
-            $array_node['name'] = $node->name;
-            if ($node->sort == 13) {
-                $server = Tools::ssv2Array($node->server);
-                $array_node['server'] = $server['add'];
-            } else {
-                $array_node['server'] = $node->getServer();
-            }
-            $array_node['sort'] = $node->sort;
-            $array_node['info'] = $node->info;
-            $array_node['mu_only'] = $node->mu_only;
-            $array_node['group'] = $node->node_group;
-
-            $array_node['raw_node'] = $node;
-            $regex = $_ENV['flag_regex'];
-            $matches = array();
-            preg_match($regex, $node->name, $matches);
-            if (isset($matches[0])) {
-                $array_node['flag'] = $matches[0] . '.png';
-            } else {
-                $array_node['flag'] = 'unknown.png';
-            }
-
-            $sort = $array_node['sort'];
-            $array_node['online_user'] = 0;
-
-            foreach ($onlineLogs as $log) {
-                if ($log['node_id'] != $node->id) {
-                    continue;
-                }
-                if (in_array($sort, array(0, 7, 8, 10, 11, 12, 13))) {
-                    $array_node['online_user'] = $log['online_user'];
-                } else {
-                    $array_node['online_user'] = -1;
-                }
-                break;
-            }
-
-            // check node status
-            // 0: new node; -1: offline; 1: online
-            $node_heartbeat = $node->node_heartbeat + 300;
-            $array_node['online'] = -1;
-            if (!in_array($sort, array(0, 7, 8, 10, 11, 12, 13)) || $node_heartbeat == 300) {
-                $array_node['online'] = 0;
-            } elseif ($node_heartbeat > time()) {
-                $array_node['online'] = 1;
-            }
-
-            $array_node['latest_load'] = -1;
-            foreach ($infoLogs as $log) {
-                if ($log['node_id'] == $node->id) {
-                    $array_node['latest_load'] = (explode(' ', $log['load']))[0] * 100;
-                    break;
-                }
-            }
-
-            $array_node['traffic_used'] = (int) Tools::flowToGB($node->node_bandwidth);
-            $array_node['traffic_limit'] = (int) Tools::flowToGB($node->node_bandwidth_limit);
-            if ($node->node_speedlimit == 0.0) {
-                $array_node['bandwidth'] = 0;
-            } elseif ($node->node_speedlimit >= 1024.00) {
-                $array_node['bandwidth'] = round($node->node_speedlimit / 1024.00, 1) . 'Gbps';
-            } else {
-                $array_node['bandwidth'] = $node->node_speedlimit . 'Mbps';
-            }
-
-            $array_node['traffic_rate'] = $node->traffic_rate;
-            $array_node['status'] = $node->status;
-
-            $array_nodes[] = $array_node;
-        }
-        return $this->view()->assign('nodes', $array_nodes)->assign('nodes_muport', $nodes_muport)->assign('relay_rules', $relay_rules)->assign('tools', new Tools())->assign('user', $user)->registerClass('URL', URL::class)->display('user/node.tpl');
-    }
-
-    public function node_old($request, $response, $args)
-    {
-        $user = Auth::getUser();
-        $nodes = Node::where('type', 1)->orderBy('name')->get();
-        $relay_rules = Relay::where('user_id', $this->user->id)->orwhere('user_id', 0)->orderBy('id', 'asc')->get();
-
-        if (!Tools::is_protocol_relay($user)) {
-            $relay_rules = array();
-        }
-
-        $node_prefix = array();
-        $node_flag_file = array();
-        $node_method = array();
-        $a = 0; //命名的什么JB变量
-        $node_order = array();
-        $node_alive = array();
-        $node_prealive = array();
-        $node_heartbeat = array();
-        $node_bandwidth = array();
-        $node_muport = array();
-        $node_isv6 = array();
-        $node_class = array();
-        $node_latestload = array();
-
-        $ports_count = Node::where('type', 1)->where('sort', 9)->orderBy('name')->count();
-
-
-        ++$ports_count;
-
-        foreach ($nodes as $node) {
-            if (($user->node_group == $node->node_group || $node->node_group == 0 || $user->is_admin) && (!$node->isNodeTrafficOut())) {
-                if ($node->sort == 9) {
-                    $mu_user = User::where('port', '=', $node->server)->first();
-                    $mu_user->obfs_param = $this->user->getMuMd5();
-                    $node_muport[] = array('server' => $node, 'user' => $mu_user);
-                    continue;
-                }
-
-                $temp = explode(' - ', $node->name);
-                $name_cheif = $temp[0];
-
-                $node_isv6[$name_cheif] = $node->isv6;
-                $node_class[$name_cheif] = $node->node_class;
-
-                if (!isset($node_prefix[$name_cheif])) {
-                    $node_prefix[$name_cheif] = array();
-                    $node_order[$name_cheif] = $a;
-                    $node_alive[$name_cheif] = 0;
-
-                    $node_method[$name_cheif] = $temp[1] ?? '';
-
-                    $a++;
-                }
-
-
-                if (in_array($node->sort, array(0, 7, 8, 10, 11, 12, 13))) {
-                    $node_tempalive = $node->getOnlineUserCount();
-                    $node_prealive[$node->id] = $node_tempalive;
-                    if ($node->isNodeOnline() !== null) {
-                        if ($node->isNodeOnline() === false) {
-                            $node_heartbeat[$name_cheif] = '离线';
-                        } else {
-                            $node_heartbeat[$name_cheif] = '在线';
-                        }
-                    } elseif (!isset($node_heartbeat[$name_cheif])) {
-                        $node_heartbeat[$name_cheif] = '暂无数据';
-                    }
-
-                    if ($node->node_bandwidth_limit == 0) {
-                        $node_bandwidth[$name_cheif] = (int) ($node->node_bandwidth / 1024 / 1024 / 1024) . ' GB 已用';
-                    } else {
-                        $node_bandwidth[$name_cheif] = (int) ($node->node_bandwidth / 1024 / 1024 / 1024) . ' GB / ' . (int) ($node->node_bandwidth_limit / 1024 / 1024 / 1024) . ' GB - ' . $node->bandwidthlimit_resetday . ' 日重置';
-                    }
-
-                    if ($node_tempalive != '暂无数据') {
-                        $node_alive[$name_cheif] += $node_tempalive;
-                    }
-                } else {
-                    $node_prealive[$node->id] = '暂无数据';
-                    if (!isset($node_heartbeat[$temp[0]])) {
-                        $node_heartbeat[$name_cheif] = '暂无数据';
-                    }
-                }
-
-                if (isset($temp[1]) && strpos($node_method[$name_cheif], $temp[1]) === false) {
-                    $node_method[$name_cheif] = $node_method[$name_cheif] . ' ' . $temp[1];
-                }
-
-                $nodeLoad = $node->getNodeLoad();
-                if (isset($nodeLoad[0]['load'])) {
-                    $node_latestload[$name_cheif] = ((float) (explode(' ', $nodeLoad[0]['load']))[0]) * 100;
-                } else {
-                    $node_latestload[$name_cheif] = null;
-                }
-
-                $node_prefix[$name_cheif][] = $node;
-
-                if ($_ENV['enable_flag'] == true) {
-                    $regex = $_ENV['flag_regex'];
-                    $matches = array();
-                    preg_match($regex, $name_cheif, $matches);
-                    $node_flag_file[$name_cheif] = $matches[0] ?? 'null';
-                }
-            }
-        }
-        $node_prefix = (object) $node_prefix;
-        $node_order = (object) $node_order;
-        $tools = new Tools();
-        return $this->view()->assign('relay_rules', $relay_rules)->assign('node_class', $node_class)->assign('node_isv6', $node_isv6)->assign('tools', $tools)->assign('node_method', $node_method)->assign('node_muport', $node_muport)->assign('node_bandwidth', $node_bandwidth)->assign('node_heartbeat', $node_heartbeat)->assign('node_prefix', $node_prefix)->assign('node_flag_file', $node_flag_file)->assign('node_prealive', $node_prealive)->assign('node_order', $node_order)->assign('user', $user)->assign('node_alive', $node_alive)->assign('node_latestload', $node_latestload)->registerClass('URL', URL::class)->display('user/node.tpl');
-    }
-
-    public function nodeInfo($request, $response, $args)
-    {
-        $user = Auth::getUser();
-        $id = $args['id'];
-        $mu = $request->getQueryParams()['ismu'];
-        $relay_rule_id = $request->getQueryParams()['relay_rule'];
-        $node = Node::find($id);
-
-        if ($node == null) {
-            return null;
-        }
-
-        switch ($node->sort) {
-            case 0:
-                if ((($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) || $user->is_admin) && ($node->node_bandwidth_limit == 0 || $node->node_bandwidth < $node->node_bandwidth_limit)) {
-                    return $this->view()->assign('node', $node)->assign('user', $user)->assign('mu', $mu)->assign('relay_rule_id', $relay_rule_id)->registerClass('URL', URL::class)->display('user/nodeinfo.tpl');
-                }
-                break;
-            case 1:
-                if ($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) {
-                    $email = $this->user->email;
-                    $email = Radius::GetUserName($email);
-                    $json_show = 'VPN 信息<br>地址：' . $node->server . '<br>' . '用户名：' . $email . '<br>密码：' . $this->user->passwd . '<br>支持方式：' . $node->method . '<br>备注：' . $node->info;
-
-                    return $this->view()->assign('json_show', $json_show)->display('user/nodeinfovpn.tpl');
-                }
-                break;
-            case 2:
-                if ($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) {
-                    $email = $this->user->email;
-                    $email = Radius::GetUserName($email);
-                    $json_show = 'SSH 信息<br>地址：' . $node->server . '<br>' . '用户名：' . $email . '<br>密码：' . $this->user->passwd . '<br>支持方式：' . $node->method . '<br>备注：' . $node->info;
-
-                    return $this->view()->assign('json_show', $json_show)->display('user/nodeinfossh.tpl');
-                }
-                break;
-            case 5:
-                if ($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) {
-                    $email = $this->user->email;
-                    $email = Radius::GetUserName($email);
-
-                    $json_show = 'Anyconnect 信息<br>地址：' . $node->server . '<br>' . '用户名：' . $email . '<br>密码：' . $this->user->passwd . '<br>支持方式：' . $node->method . '<br>备注：' . $node->info;
-
-                    return $this->view()->assign('json_show', $json_show)->display('user/nodeinfoanyconnect.tpl');
-                }
-                break;
-            case 10:
-                if ((($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) || $user->is_admin) && ($node->node_bandwidth_limit == 0 || $node->node_bandwidth < $node->node_bandwidth_limit)) {
-                    return $this->view()->assign('node', $node)->assign('user', $user)->assign('mu', $mu)->assign('relay_rule_id', $relay_rule_id)->registerClass('URL', URL::class)->display('user/nodeinfo.tpl');
-                }
-                break;
-            case 13:
-                if ((($user->class >= $node->node_class && ($user->node_group == $node->node_group || $node->node_group == 0)) || $user->is_admin) && ($node->node_bandwidth_limit == 0 || $node->node_bandwidth < $node->node_bandwidth_limit)) {
-                    return $this->view()->assign('node', $node)->assign('user', $user)->assign('mu', $mu)->assign('relay_rule_id', $relay_rule_id)->registerClass('URL', URL::class)->display('user/nodeinfo.tpl');
-                }
-                break;
-            default:
-                echo '微笑';
-        }
-    }
-
     public function profile($request, $response, $args)
     {
         $pageNum = $request->getQueryParams()['page'] ?? 1;
@@ -917,6 +637,68 @@ class UserController extends BaseController
         return $this->echoJson($response, $res);
     }
 
+    public function updateEmail($request, $response, $args)
+    {
+        $user = $this->user;
+        $newemail = $request->getParam('newemail');
+        $oldemail = $user->email;
+        $otheruser = User::where('email', $newemail)->first();
+        if ($_ENV['enable_telegram'] !== true) {
+            $res['ret'] = 0;
+            $res['msg'] = '未啓用用戶自行修改郵箱功能';
+            return $response->getBody()->write(json_encode($res));
+        }
+        if (Config::getconfig('Register.bool.Enable_email_verify')) {
+            $emailcode = $request->getParam('emailcode');
+            $mailcount = EmailVerify::where('email', '=', $newemail)->where('code', '=', $emailcode)->where('expire_in', '>', time())->first();
+            if ($mailcount == null) {
+                $res['ret'] = 0;
+                $res['msg'] = '您的邮箱验证码不正确';
+                return $response->getBody()->write(json_encode($res));
+            }
+        }
+        if ($newemail == '') {
+            $res['ret'] = 0;
+            $res['msg'] = '未填写邮箱';
+            return $response->getBody()->write(json_encode($res));
+        }
+        if (!Check::isEmailLegal($newemail)) {
+            $res['ret'] = 0;
+            $res['msg'] = '邮箱无效';
+            return $response->getBody()->write(json_encode($res));
+        }
+        if ($otheruser != null) {
+            $res['ret'] = 0;
+            $res['msg'] = '邮箱已经被使用了';
+            return $response->getBody()->write(json_encode($res));
+        }
+        if ($newemail == $oldemail) {
+            $res['ret'] = 0;
+            $res['msg'] = '新邮箱不能和旧邮箱一样';
+            return $response->getBody()->write(json_encode($res));
+        }
+        $antiXss = new AntiXSS();
+        $user->email = $antiXss->xss_clean($newemail);
+        $user->save();
+
+        $res['ret'] = 1;
+        $res['msg'] = '修改成功';
+        return $this->echoJson($response, $res);
+    }
+
+    public function updateUsername($request, $response, $args)
+    {
+        $newusername = $request->getParam('newusername');
+        $user = $this->user;
+        $antiXss = new AntiXSS();
+        $user->user_name = $antiXss->xss_clean($newusername);
+        $user->save();
+
+        $res['ret'] = 1;
+        $res['msg'] = '修改成功';
+        return $this->echoJson($response, $res);
+    }
+
     public function updateHide($request, $response, $args)
     {
         $hide = $request->getParam('hide');
@@ -1080,19 +862,19 @@ class UserController extends BaseController
         $shop = Shop::where('id', $shop)->where('status', 1)->first();
 
         $orders = Bought::where('userid', $this->user->id)->get();
-        foreach ($orders as $order) 
+        foreach ($orders as $order)
         {
             $shop_item = Shop::where('id',$order['shopid'])->first();
             $shop_item = json_decode($shop_item['content']);
             $shop_item->datetime = $order['datetime'];
-            if (array_key_exists('reset',$shop_item) || array_key_exists('reset_value',$shop_item) || array_key_exists('reset_exp',$shop_item))
+            if (property_exists($shop_item,'reset') || property_exists($shop_item,'reset_value') || property_exists($shop_item,'reset_exp'))
             {
                 if (time() < ($shop_item->datetime + $shop_item->reset_exp * 86400) ) {
                     $res['ret'] = 0;
                     $res['msg'] = '您购买的含有自动重置系统的套餐还未过期，无法购买新套餐';
                     return $response->getBody()->write(json_encode($res));
                 }
-            } 
+            }
         };
 
         if ($shop == null) {
@@ -1126,6 +908,16 @@ class UserController extends BaseController
                 $res['ret'] = 0;
                 $res['msg'] = '此优惠码已过期';
                 return $response->getBody()->write(json_encode($res));
+            }
+
+            $use_limit = $coupon->onetime;
+            if ($use_limit > 0) {
+                $use_count = Bought::where('userid', $user->id)->where('coupon', $coupon->code)->count();
+                if ($use_count >= $use_limit) {
+                    $res['ret'] = 0;
+                    $res['msg'] = '优惠码次数已用完';
+                    return $response->getBody()->write(json_encode($res));
+                }
             }
         }
 
@@ -1186,12 +978,10 @@ class UserController extends BaseController
         $pageNum = $request->getQueryParams()['page'] ?? 1;
         $shops = Bought::where('userid', $this->user->id)->orderBy('id', 'desc')->paginate(15, ['*'], 'page', $pageNum);
         $shops->setPath('/user/bought');
-        if($request->getParam('json') == 1)
-        {
+        if ($request->getParam('json') == 1) {
             $res['ret'] = 1;
-            foreach ($shops as $shop) 
-            {
-                $shop->datetime = $shop->datetime("Y/m/d",$date_unix);
+            foreach ($shops as $shop) {
+                $shop->datetime = $shop->datetime();
                 $shop->name = $shop->shop()->name;
                 $shop->content = $shop->shop()->content();
             };
@@ -1224,224 +1014,6 @@ class UserController extends BaseController
         $rs['ret'] = 1;
         $rs['msg'] = '关闭自动续费成功';
         return $response->getBody()->write(json_encode($rs));
-    }
-
-
-    public function ticket($request, $response, $args)
-    {
-        if ($_ENV['enable_ticket'] != true) {
-            exit(0);
-        }
-        $pageNum = $request->getQueryParams()['page'] ?? 1;
-        $tickets = Ticket::where('userid', $this->user->id)->where('rootid', 0)->orderBy('datetime', 'desc')->paginate(15, ['*'], 'page', $pageNum);
-        $tickets->setPath('/user/ticket');
-
-        return $this->view()->assign('tickets', $tickets)->display('user/ticket.tpl');
-    }
-
-    public function ticket_create($request, $response, $args)
-    {
-        return $this->view()->display('user/ticket_create.tpl');
-    }
-
-    public function ticket_add($request, $response, $args)
-    {
-        $title = $request->getParam('title');
-        $content = $request->getParam('content');
-        $markdown = $request->getParam('markdown');
-
-        if ($title == '' || $content == '') {
-            $res['ret'] = 0;
-            $res['msg'] = '非法输入';
-            return $this->echoJson($response, $res);
-        }
-
-        if (strpos($content, 'admin') != false || strpos($content, 'user') != false) {
-            $res['ret'] = 0;
-            $res['msg'] = '请求中有不当词语';
-            return $this->echoJson($response, $res);
-        }
-
-        $ticket = new Ticket();
-        $antiXss = new AntiXSS();
-
-        $ticket->title = $antiXss->xss_clean($title);
-        $ticket->content = $antiXss->xss_clean($content);
-        $ticket->rootid = 0;
-        $ticket->userid = $this->user->id;
-        $ticket->datetime = time();
-        $ticket->save();
-
-        if ($_ENV['mail_ticket'] == true && $markdown != '') {
-            $adminUser = User::where('is_admin', '=', '1')->get();
-            foreach ($adminUser as $user) {
-                $subject = $_ENV['appName'] . '-新工单被开启';
-                $to = $user->email;
-                $text = '管理员，有人开启了新的工单，请您及时处理。';
-                try {
-                    Mail::send($to, $subject, 'news/warn.tpl', [
-                        'user' => $user, 'text' => $text
-                    ], []);
-                } catch (Exception $e) {
-                    echo $e->getMessage();
-                }
-            }
-        }
-
-        if ($_ENV['useScFtqq'] == true && $markdown != '') {
-            $ScFtqq_SCKEY = $_ENV['ScFtqq_SCKEY'];
-            $postdata = http_build_query(
-                array(
-                    'text' => $_ENV['appName'] . '-新工单被开启',
-                    'desp' => $markdown
-                )
-            );
-            $opts = array('http' =>
-            array(
-                'method' => 'POST',
-                'header' => 'Content-type: application/x-www-form-urlencoded',
-                'content' => $postdata
-            ));
-            $context = stream_context_create($opts);
-            file_get_contents('https://sc.ftqq.com/' . $ScFtqq_SCKEY . '.send', false, $context);
-        }
-
-        $res['ret'] = 1;
-        $res['msg'] = '提交成功';
-        return $this->echoJson($response, $res);
-    }
-
-    public function ticket_update($request, $response, $args)
-    {
-        $id = $args['id'];
-        $content = $request->getParam('content');
-        $status = $request->getParam('status');
-        $markdown = $request->getParam('markdown');
-
-        if ($content == '' || $status == '') {
-            $res['ret'] = 0;
-            $res['msg'] = '非法输入';
-            return $this->echoJson($response, $res);
-        }
-
-        if (strpos($content, 'admin') != false || strpos($content, 'user') != false) {
-            $res['ret'] = 0;
-            $res['msg'] = '请求中有不当词语';
-            return $this->echoJson($response, $res);
-        }
-
-
-        $ticket_main = Ticket::where('id', '=', $id)->where('rootid', '=', 0)->first();
-        if ($ticket_main->userid != $this->user->id) {
-            $newResponse = $response->withStatus(302)->withHeader('Location', '/user/ticket');
-            return $newResponse;
-        }
-
-        if ($status == 1 && $ticket_main->status != $status) {
-            if ($_ENV['mail_ticket'] == true && $markdown != '') {
-                $adminUser = User::where('is_admin', '=', '1')->get();
-                foreach ($adminUser as $user) {
-                    $subject = $_ENV['appName'] . '-工单被重新开启';
-                    $to = $user->email;
-                    $text = '管理员，有人重新开启了<a href="' . $_ENV['baseUrl'] . '/admin/ticket/' . $ticket_main->id . '/view">工单</a>，请您及时处理。';
-                    try {
-                        Mail::send($to, $subject, 'news/warn.tpl', [
-                            'user' => $user, 'text' => $text
-                        ], []);
-                    } catch (Exception $e) {
-                        echo $e->getMessage();
-                    }
-                }
-            }
-            if ($_ENV['useScFtqq'] == true && $markdown != '') {
-                $ScFtqq_SCKEY = $_ENV['ScFtqq_SCKEY'];
-                $postdata = http_build_query(
-                    array(
-                        'text' => $_ENV['appName'] . '-工单被重新开启',
-                        'desp' => $markdown
-                    )
-                );
-                $opts = array('http' =>
-                array(
-                    'method' => 'POST',
-                    'header' => 'Content-type: application/x-www-form-urlencoded',
-                    'content' => $postdata
-                ));
-                $context = stream_context_create($opts);
-                file_get_contents('https://sc.ftqq.com/' . $ScFtqq_SCKEY . '.send', false, $context);
-                $useScFtqq = $_ENV['ScFtqq_SCKEY'];
-            }
-        } else {
-            if ($_ENV['mail_ticket'] == true && $markdown != '') {
-                $adminUser = User::where('is_admin', '=', '1')->get();
-                foreach ($adminUser as $user) {
-                    $subject = $_ENV['appName'] . '-工单被回复';
-                    $to = $user->email;
-                    $text = '管理员，有人回复了<a href="' . $_ENV['baseUrl'] . '/admin/ticket/' . $ticket_main->id . '/view">工单</a>，请您及时处理。';
-                    try {
-                        Mail::send($to, $subject, 'news/warn.tpl', [
-                            'user' => $user, 'text' => $text
-                        ], []);
-                    } catch (Exception $e) {
-                        echo $e->getMessage();
-                    }
-                }
-            }
-            if ($_ENV['useScFtqq'] == true && $markdown != '') {
-                $ScFtqq_SCKEY = $_ENV['ScFtqq_SCKEY'];
-                $postdata = http_build_query(
-                    array(
-                        'text' => $_ENV['appName'] . '-工单被回复',
-                        'desp' => $markdown
-                    )
-                );
-                $opts = array('http' =>
-                array(
-                    'method' => 'POST',
-                    'header' => 'Content-type: application/x-www-form-urlencoded',
-                    'content' => $postdata
-                ));
-                $context = stream_context_create($opts);
-                file_get_contents('https://sc.ftqq.com/' . $ScFtqq_SCKEY . '.send', false, $context);
-            }
-        }
-
-        $antiXss = new AntiXSS();
-
-        $ticket = new Ticket();
-        $ticket->title = $antiXss->xss_clean($ticket_main->title);
-        $ticket->content = $antiXss->xss_clean($content);
-        $ticket->rootid = $ticket_main->id;
-        $ticket->userid = $this->user->id;
-        $ticket->datetime = time();
-        $ticket_main->status = $status;
-
-        $ticket_main->save();
-        $ticket->save();
-
-
-        $res['ret'] = 1;
-        $res['msg'] = '提交成功';
-        return $this->echoJson($response, $res);
-    }
-
-    public function ticket_view($request, $response, $args)
-    {
-        $id = $args['id'];
-        $ticket_main = Ticket::where('id', '=', $id)->where('rootid', '=', 0)->first();
-        if ($ticket_main->userid != $this->user->id) {
-            $newResponse = $response->withStatus(302)->withHeader('Location', '/user/ticket');
-            return $newResponse;
-        }
-
-        $pageNum = $request->getQueryParams()['page'] ?? 1;
-
-
-        $ticketset = Ticket::where('id', $id)->orWhere('rootid', '=', $id)->orderBy('datetime', 'desc')->paginate(5, ['*'], 'page', $pageNum);
-        $ticketset->setPath('/user/ticket/' . $id . '/view');
-
-
-        return $this->view()->assign('ticketset', $ticketset)->assign('id', $id)->display('user/ticket_view.tpl');
     }
 
     public function updateWechat($request, $response, $args)
@@ -1567,21 +1139,22 @@ class UserController extends BaseController
 
     public function updateMail($request, $response, $args)
     {
-        $mail = $request->getParam('mail');
-        $mail = trim($mail);
-        $user = $this->user;
-
-        if (!($mail == '1' || $mail == '0')) {
+        $value = (int) $request->getParam('mail');
+        if (in_array($value, [0, 1, 2])) {
+            $user = $this->user;
+            if ($value == 2 && $_ENV['enable_telegram'] === false) {
+                $res['ret'] = 0;
+                $res['msg'] = '修改失败，当前无法使用 Telegram 接收每日报告';
+                return $this->echoJson($response, $res);
+            }
+            $user->sendDailyMail = $value;
+            $user->save();
+            $res['ret'] = 1;
+            $res['msg'] = '修改成功';
+        } else {
             $res['ret'] = 0;
             $res['msg'] = '非法输入';
-            return $response->getBody()->write(json_encode($res));
         }
-
-        $user->sendDailyMail = $mail;
-        $user->save();
-
-        $res['ret'] = 1;
-        $res['msg'] = '修改成功';
         return $this->echoJson($response, $res);
     }
 
@@ -1666,7 +1239,7 @@ class UserController extends BaseController
         $user->updateMethod($method);
 
         if (!URL::SSCanConnect($user)) {
-            $res['ret'] = 0;
+            $res['ret'] = 1;
             $res['msg'] = '设置成功，但您目前的协议，混淆，加密方式设置会导致 Shadowsocks原版客户端无法连接，请您自行更换到 ShadowsocksR 客户端。';
             return $this->echoJson($response, $res);
         }
@@ -1773,16 +1346,14 @@ class UserController extends BaseController
     {
         $traffic = TrafficLog::where('user_id', $this->user->id)->where('log_time', '>', time() - 3 * 86400)->orderBy('id', 'desc')->get();
 
-        if($request->getParam('json') == 1)
-        {
+        if ($request->getParam('json') == 1) {
             $res['ret'] = 1;
-            foreach ($traffic as $trafficdata)
-            {
+            foreach ($traffic as $trafficdata) {
                 $trafficdata->total_used = $trafficdata->totalUsedRaw();
                 $trafficdata->name = $trafficdata->node()->name;
             }
             $res['traffic'] = $traffic;
-            
+
             return $this->echoJson($response, $res);
         }
 
@@ -1794,13 +1365,13 @@ class UserController extends BaseController
         $pageNum = $request->getQueryParams()['page'] ?? 1;
         $logs = DetectRule::paginate(15, ['*'], 'page', $pageNum);
 
-        if($request->getParam('json') == 1)
-        {
+        if ($request->getParam('json') == 1) {
             $res['ret'] = 1;
             $res['logs'] = $logs;
             return $this->echoJson($response, $res);
         }
 
+        $logs->setPath('/user/detect');
         return $this->view()->assign('rules', $logs)->display('user/detect_index.tpl');
     }
 
@@ -1809,11 +1380,9 @@ class UserController extends BaseController
         $pageNum = $request->getQueryParams()['page'] ?? 1;
         $logs = DetectLog::orderBy('id', 'desc')->where('user_id', $this->user->id)->paginate(15, ['*'], 'page', $pageNum);
 
-        if($request->getParam('json') == 1)
-        {
+        if ($request->getParam('json') == 1) {
             $res['ret'] = 1;
-            foreach ($logs as $log)
-            {
+            foreach ($logs as $log) {
                 $log->node_name = $log->Node()->name;
                 $log->detect_rule_name = $log->DetectRule()->name;
                 $log->detect_rule_text = $log->DetectRule()->text;
@@ -1825,6 +1394,7 @@ class UserController extends BaseController
             return $this->echoJson($response, $res);
         }
 
+        $logs->setPath('/user/detect/log');
         return $this->view()->assign('logs', $logs)->display('user/detect_log.tpl');
     }
 
@@ -1906,9 +1476,6 @@ class UserController extends BaseController
             case 'ssr':
                 $return .= URL::get_NewAllUrl($user, ['type' => 'ssr']) . PHP_EOL;
                 break;
-            case 'ssd':
-                $return .= LinkController::getSSD($user, 1, [], ['type' => 'ss']) . PHP_EOL;
-                break;
             case 'v2ray':
                 $return .= URL::get_NewAllUrl($user, ['type' => 'vmess']) . PHP_EOL;
                 break;
@@ -1938,6 +1505,19 @@ class UserController extends BaseController
         $pageNum = $request->getQueryParams()['page'] ?? 1;
         $logs = UserSubscribeLog::orderBy('id', 'desc')->where('user_id', $this->user->id)->paginate(15, ['*'], 'page', $pageNum);
         $iplocation = new QQWry();
+        $logs->setPath('/user/subscribe_log');
+
+        if (($request->getParam('json') == 1)) {
+            $res['ret'] = 1;
+            $res['logs'] = $logs;
+            foreach ($logs as $log) {
+                $location = $iplocation->getlocation($log->request_ip);
+                $log->country = iconv("gbk", "utf-8//IGNORE", $location['country']);
+                $log->area = iconv("gbk", "utf-8//IGNORE", $location['area']);
+            }
+            $res['subscribeLog_keep_days'] = $_ENV['subscribeLog_keep_days'];
+            return $this->echoJson($response, $res);
+        }
 
         return $this->view()->assign('logs', $logs)->assign('iplocation', $iplocation)->fetch('user/subscribe_log.tpl');
     }
@@ -1952,7 +1532,7 @@ class UserController extends BaseController
     public function getPcClient($request, $response, $args)
     {
         $zipArc = new \ZipArchive();
-        $user_token = LinkController::GenerateSSRSubCode($this->user->id, 0);
+        $user_token = LinkController::GenerateSSRSubCode($this->user->id);
         $type = trim($request->getQueryParams()['type']);
         // 临时文件存放路径
         $temp_file_path = BASE_PATH . '/storage/';
@@ -1962,10 +1542,6 @@ class UserController extends BaseController
             case 'ss-win':
                 $user_config_file_name = 'gui-config.json';
                 $content = ClientProfiles::getSSPcConf($this->user);
-                break;
-            case 'ssd-win':
-                $user_config_file_name = 'gui-config.json';
-                $content = ClientProfiles::getSSDPcConf($this->user);
                 break;
             case 'ssr-win':
                 $user_config_file_name = 'gui-config.json';

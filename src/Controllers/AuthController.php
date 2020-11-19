@@ -338,7 +338,9 @@ class AuthController extends BaseController
         }
 
         //dumplin：1、邀请人等级为0则邀请码不可用；2、邀请人invite_num为可邀请次数，填负数则为无限
-        $c = InviteCode::where('code', $code)->first();
+        if ($code != null){
+            $c = InviteCode::where('code', $code)->first();
+        }
         if ($c == null) {
             if (Config::getconfig('Register.string.Mode') === 'invite') {
                 $res['ret'] = 0;
@@ -393,11 +395,11 @@ class AuthController extends BaseController
         $user->auto_reset_day       = $_ENV['reg_auto_reset_day'];
         $user->auto_reset_bandwidth = $_ENV['reg_auto_reset_bandwidth'];
         $user->money                = 0;
+        $user->sendDailyMail        = Config::getconfig('Register.bool.send_dailyEmail');
 
         //dumplin：填写邀请人，写入邀请奖励
         $user->ref_by = 0;
-        if (($c != null) && $c->user_id != 0) {
-            $gift_user = User::where('id', '=', $c->user_id)->first();
+        if ($c != null && $c->user_id != 0) {
             $user->ref_by = $c->user_id;
             $user->money = (int) Config::getconfig('Register.string.defaultInvite_get_money');
             $gift_user->transfer_enable += $_ENV['invite_gift'] * 1024 * 1024 * 1024;
@@ -418,7 +420,7 @@ class AuthController extends BaseController
         $user->plan             = 'A';
         $user->theme            = $_ENV['theme'];
 
-        $groups                 = explode(',', $_ENV['ramdom_group']);
+        $groups                 = explode(',', $_ENV['random_group']);
 
         $user->node_group       = $groups[array_rand($groups)];
 
@@ -457,8 +459,7 @@ class AuthController extends BaseController
         $email = strtolower($email);
         $passwd = $request->getParam('passwd');
         $repasswd = $request->getParam('repasswd');
-        $code = $request->getParam('code');
-        $code = trim($code);
+        $code = trim($request->getParam('code'));
         $imtype = $request->getParam('imtype');
         $emailcode = $request->getParam('emailcode');
         $emailcode = trim($emailcode);

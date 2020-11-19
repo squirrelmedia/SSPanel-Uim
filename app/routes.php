@@ -16,10 +16,6 @@ return function (SlimApp $app) {
     $app->get('/indexold',  App\Controllers\HomeController::class . ':indexold');
 
     // other
-    $app->get('/spay_back',             App\Services\Payment::class . ':notify');
-    $app->post('/spay_back',            App\Services\Payment::class . ':notify');
-    $app->get('/tomato_back/{type}',    App\Services\Payment::class . ':notify');
-    $app->post('/tomato_back/{type}',   App\Services\Payment::class . ':notify');
     $app->post('/notify',               App\Controllers\HomeController::class . ':notify');
 
     // Telegram
@@ -29,21 +25,24 @@ return function (SlimApp $app) {
     $app->group('/user', function () {
         $this->get('',                          App\Controllers\UserController::class . ':index');
         $this->get('/',                         App\Controllers\UserController::class . ':index');
+
         $this->post('/checkin',                 App\Controllers\UserController::class . ':doCheckin');
-        $this->get('/node',                     App\Controllers\UserController::class . ':node');
+
         $this->get('/tutorial',                 App\Controllers\UserController::class . ':tutorial');
         $this->get('/announcement',             App\Controllers\UserController::class . ':announcement');
+
         $this->get('/donate',                   App\Controllers\UserController::class . ':donate');
         $this->get('/lookingglass',             App\Controllers\UserController::class . ':lookingglass');
-        $this->get('/node/{id}',                App\Controllers\UserController::class . ':nodeInfo');
-        $this->get('/node/{id}/ajax',           App\Controllers\UserController::class . ':nodeAjax');
         $this->get('/profile',                  App\Controllers\UserController::class . ':profile');
         $this->get('/invite',                   App\Controllers\UserController::class . ':invite');
+        $this->get('/disable',                  App\Controllers\UserController::class . ':disable');
+
+        $this->get('/node',                     App\Controllers\User\NodeController::class . ':node');
+        $this->get('/node/{id}',                App\Controllers\User\NodeController::class . ':nodeInfo');
+        $this->get('/node/{id}/ajax',           App\Controllers\User\NodeController::class . ':nodeAjax');
 
         $this->get('/detect',                   App\Controllers\UserController::class . ':detect_index');
         $this->get('/detect/log',               App\Controllers\UserController::class . ':detect_log');
-
-        $this->get('/disable',                  App\Controllers\UserController::class . ':disable');
 
         $this->get('/shop',                     App\Controllers\UserController::class . ':shop');
         $this->post('/coupon_check',            App\Controllers\UserController::class . ':CouponCheck');
@@ -51,23 +50,26 @@ return function (SlimApp $app) {
         $this->post('/buy_traffic_package',     App\Controllers\UserController::class . ':buy_traffic_package');
 
         // Relay Mange
-        $this->get('/relay',                    App\Controllers\RelayController::class . ':index');
-        $this->get('/relay/create',             App\Controllers\RelayController::class . ':create');
-        $this->post('/relay',                   App\Controllers\RelayController::class . ':add');
-        $this->get('/relay/{id}/edit',          App\Controllers\RelayController::class . ':edit');
-        $this->put('/relay/{id}',               App\Controllers\RelayController::class . ':update');
-        $this->delete('/relay',                 App\Controllers\RelayController::class . ':delete');
+        $this->get('/relay',                    App\Controllers\User\RelayController::class . ':index');
+        $this->get('/relay/create',             App\Controllers\User\RelayController::class . ':create');
+        $this->post('/relay',                   App\Controllers\User\RelayController::class . ':add');
+        $this->get('/relay/{id}/edit',          App\Controllers\User\RelayController::class . ':edit');
+        $this->put('/relay/{id}',               App\Controllers\User\RelayController::class . ':update');
+        $this->delete('/relay',                 App\Controllers\User\RelayController::class . ':delete');
 
-        $this->get('/ticket',                   App\Controllers\UserController::class . ':ticket');
-        $this->get('/ticket/create',            App\Controllers\UserController::class . ':ticket_create');
-        $this->post('/ticket',                  App\Controllers\UserController::class . ':ticket_add');
-        $this->get('/ticket/{id}/view',         App\Controllers\UserController::class . ':ticket_view');
-        $this->put('/ticket/{id}',              App\Controllers\UserController::class . ':ticket_update');
+        $this->get('/ticket',                   App\Controllers\User\TicketController::class . ':ticket');
+        $this->get('/ticket/create',            App\Controllers\User\TicketController::class . ':ticket_create');
+        $this->post('/ticket',                  App\Controllers\User\TicketController::class . ':ticket_add');
+        $this->get('/ticket/{id}/view',         App\Controllers\User\TicketController::class . ':ticket_view');
+        $this->put('/ticket/{id}',              App\Controllers\User\TicketController::class . ':ticket_update');
 
         $this->post('/buy_invite',              App\Controllers\UserController::class . ':buyInvite');
         $this->post('/custom_invite',           App\Controllers\UserController::class . ':customInvite');
         $this->get('/edit',                     App\Controllers\UserController::class . ':edit');
+        $this->post('/email',                   App\Controllers\UserController::class . ':updateEmail');
+        $this->post('/username',                App\Controllers\UserController::class . ':updateUsername');
         $this->post('/password',                App\Controllers\UserController::class . ':updatePassword');
+        $this->post('/send',                    App\Controllers\AuthController::class . ':sendVerify');
         $this->post('/wechat',                  App\Controllers\UserController::class . ':updateWechat');
         $this->post('/ssr',                     App\Controllers\UserController::class . ':updateSSR');
         $this->post('/theme',                   App\Controllers\UserController::class . ':updateTheme');
@@ -373,6 +375,7 @@ return function (SlimApp $app) {
     $app->get('/getnodelist',           App\Controllers\VueController::class . ':getNodeList');
     $app->get('/nodeinfo/{id}',         App\Controllers\VueController::class . ':getNodeInfo');
     $app->get('/resettelegram',         App\Controllers\VueController::class . ':telegramReset');
+    $app->get('/getconnectsettings',         App\Controllers\VueController::class . ':getConnectSettings');
 
     /**
      * chenPay

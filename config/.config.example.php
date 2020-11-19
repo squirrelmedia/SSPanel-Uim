@@ -6,10 +6,7 @@
 //如需换行，直接换行即可，无需换行符
 //【新增/删除】config无需写入迁移附注
 $_ENV['config_migrate_notice'] =
-'enable_geetest_* 已变更为 enable_*_captcha
-crisp已被替换为mylivechat
-telegrma_qrcode被重命名为qrcode
-
+'新增 enable_change_email 配置項
 ';
 $_ENV['version'] = 2;    //仅当涉及【需要修改config以外的文件】时才需要+1，站长勿动
 
@@ -17,37 +14,31 @@ $_ENV['version'] = 2;    //仅当涉及【需要修改config以外的文件】�
 //基本设置--------------------------------------------------------------------------------------------
 $_ENV['key']        = '1145141919810';                //!!! 瞎 jb 修改此key为随机字符串确保网站安全 !!!
 $_ENV['debug']      = false;                          //正式环境请确保为 false
-$_ENV['appName']    = 'sspanel';                      //站点名称
-$_ENV['baseUrl']    = 'http://url.com';               //站点地址
-$_ENV['muKey']      = 'default_mu_key';               //用于校验魔改后端请求，可以随意修改，但请保持前后端一致，否则节点不能工作！
-
-// 主站是否提供 WEBAPI
-// - 如果您全部节点使用数据库连接，则保持为 false
-// - 如果您拥有独立的 Webapi 站点或 Seed 等，则保持为 false
-// - 如果您不使用数据库连接并且无独立 Webapi 站点或 Seed 等，请更改为 true
-$_ENV['Webapi']     = false;
+$_ENV['appName']    = 'SSPanel-UIM';                      //站点名称
+$_ENV['baseUrl']    = 'https://sspanel.host/';               //站点地址
+$_ENV['muKey']      = 'NimaQu';                       //用于校验魔改后端请求，可以随意修改，但请保持前后端一致，否则节点不能工作！
 
 
 //数据库设置--------------------------------------------------------------------------------------------
-$_ENV['db_driver']    = 'mysql';             //数据库程序
-// 数据库网络地址(在本机上推荐用 Unix Socket, 与下面二选一, 不用则留空)
-// 例: localhost(可解析主机名), 127.0.0.1(IP 地址), 127.0.0.1:4406(含端口)
+// db_host|db_socket 二选一，若设置 db_socket 则 db_host 会被忽略，不用请留空。若数据库在本机上推荐用 db_socket。
+// db_host 例: localhost（可解析的主机名）, 127.0.0.1（IP 地址）, 10.0.0.2:4406（含端口)
+// db_socket 例：/var/run/mysqld/mysqld.sock（需使用绝对地址）
+$_ENV['db_driver']    = 'mysql';
 $_ENV['db_host']      = '';
-// 数据库 Unix Socket 地址(优先级高于网络地址, 与上面二选一, 不用则留空)
-// 例: /var/run/mysqld/mysqld.sock(绝对地址)
 $_ENV['db_socket']    = '';
 $_ENV['db_database']  = 'sspanel';           //数据库名
 $_ENV['db_username']  = 'root';              //数据库用户名
 $_ENV['db_password']  = 'sspanel';           //用户名对应的密码
 #高级
-$_ENV['db_charset']   = 'utf8';
-$_ENV['db_collation'] = 'utf8_general_ci';
+$_ENV['db_charset']   = 'utf8mb4';
+$_ENV['db_collation'] = 'utf8mb4_unicode_ci';
 $_ENV['db_prefix']    = '';
 
 
 //邮件设置--------------------------------------------------------------------------------------------
 $_ENV['mailDriver']      = 'none';      //发送邮件方式：none / mailgun / smtp / sendgrid
 $_ENV['sendPageLimit']   = 50;          //发信分页 解决大站发公告超时问题
+$_ENV['email_queue']     = true;        //如题，自动计划任务邮件使用队列 需要每分钟执行 php xcat Job SendMail
 
 # mailgun
 $_ENV['mailgun_key']     = '';
@@ -55,13 +46,14 @@ $_ENV['mailgun_domain']  = '';
 $_ENV['mailgun_sender']  = '';
 
 # smtp
-$_ENV['smtp_host']          = '';                          // smtp 邮局服务器域
-$_ENV['smtp_username']      = '';                          // smtp 账户名
-$_ENV['smtp_port']          = 465;                         // smtp 端口(常见端口 25, 587 465)
-$_ENV['smtp_sender']        = '';                          // smtp 账户自定义显示名
-$_ENV['smtp_passsword']     = '';                          // stmp 账户密码
-$_ENV['smtp_ssl']           = true;                        // 支持 TLS/SSL 发信
-$_ENV['smtp_reply_to']      = $_ENV['smtp_username'];      // 当用户回复通知邮件时回复改地址
+$_ENV['smtp_host']          = '';                          // SMTP 邮局服务器域名
+$_ENV['smtp_username']      = '';                          // SMTP 账户名
+$_ENV['smtp_password']     = '';                           // SMTP 账户密码
+$_ENV['smtp_port']          = 465;                         // SMTP 端口(常见端口 25, 587 465)
+$_ENV['smtp_name']          = '';                          // SMTP 发信名称
+$_ENV['smtp_sender']        = '';                          // SMTP 账户发信地址
+$_ENV['smtp_ssl']           = true;                        // 是否使用 TLS/SSL 发信
+$_ENV['smtp_reply_to']      = $_ENV['smtp_username'];      // 用户回复邮件的接受地址
 $_ENV['smtp_reply_to_name'] = $_ENV['smtp_sender'];        // 回复地址显示名
 
 # sendgrid
@@ -72,14 +64,14 @@ $_ENV['sendgrid_name']   = '';       //发件人名称
 
 //备份设置--------------------------------------------------------------------------------------------
 $_ENV['auto_backup_email']  = '';                               //接收备份的邮箱
-$_ENV['auto_backup_passwd'] = '';                               //备份的压缩密码
+$_ENV['auto_backup_password'] = '';                               //备份的压缩密码
 $_ENV['backup_notify']      = false;                            //备份通知到TG群中
 
 
 //用户注册设置-----------------------------------------------------------------------------------------
 $_ENV['reg_auto_reset_day']        = 0;                         //注册时的流量重置日，0为不重置
 $_ENV['reg_auto_reset_bandwidth']  = 0;                         //需要重置的流量，0为不重置
-$_ENV['ramdom_group']              = '0';                       //注册时随机分组，注册时随机分配到的分组，多个分组请用英文半角逗号分隔
+$_ENV['random_group']              = '0';                       //注册时随机分组，注册时随机分配到的分组，多个分组请用英文半角逗号分隔
 
 $_ENV['reg_forbidden_ip']          = '127.0.0.0/8,::1/128';     //注册时默认禁止访问IP列表，半角英文逗号分割
 $_ENV['min_port']                  = 10000;                     //用户端口池最小值
@@ -117,6 +109,7 @@ $_ENV['class_expire_reset_traffic'] = 0;            //等级到期时重置为�
 $_ENV['account_expire_delete_days'] = -1;           //账户到期几天之后会删除账户，小于0时不删除
 
 $_ENV['enable_kill']                = true;         //是否允许用户注销账户
+$_ENV['enable_change_email']        = true;         //是否允许用户更改賬戶郵箱
 
 #用户流量余量不足邮件提醒
 $_ENV['notify_limit_mode']          = true;         //false为关闭，per为按照百分比提醒，mb为按照固定剩余流量提醒
@@ -125,29 +118,24 @@ $_ENV['notify_limit_value']         = 20;           //当上一项为per时，�
 
 //订阅设置---------------------------------------------------------------------------------------
 $_ENV['Subscribe']                  = true;                         //本站是否提供订阅功能
-
 $_ENV['subUrl']                     = $_ENV['baseUrl'] . '/link/';  //订阅地址，如需和站点名称相同，请不要修改
 $_ENV['mergeSub']                   = true;                         //合并订阅设置 可选项 false / true
 $_ENV['enable_sub_extend']          = true;                         // 是否开启订阅中默认显示流量剩余以及账户到期时间以及 sub_message 中的信息
+
 
 // 订阅中的营销信息
 // 使用数组形式，将会添加在订阅列表的顶端
 // 可用于为用户推送最新地址等信息，尽可能简短且数量不宜太多
 $_ENV['sub_message']                = [];
-
 $_ENV['disable_sub_mu_port']        = false;                        // 将订阅中单端口的信息去除
-
 $_ENV['subscribeLog']               = false;			            //是否记录用户订阅日志
 $_ENV['subscribeLog_show']          = true;                         //是否允许用户查看订阅记录
 $_ENV['subscribeLog_keep_days']     = 7;		                    //订阅记录保留天数
-
 $_ENV['mu_port_migration']          = false;                        //为后端直接下发偏移后的端口
 $_ENV['add_emoji_to_node_name']     = false;                        //为部分订阅中默认添加 emoji
 $_ENV['add_appName_to_ss_uri']      = true;                         //为 SS 节点名称中添加站点名
-
 $_ENV['subscribe_client']           = true;                         //下载协议客户端时附带节点和订阅信息
 $_ENV['subscribe_client_url']       = '';                           //使用独立的服务器提供附带节点和订阅信息的协议客户端下载，为空表示不使用
-
 $_ENV['Clash_DefaultProfiles']      = 'default';                    //Clash 默认配置方案
 $_ENV['Surge_DefaultProfiles']      = 'default';                    //Surge 默认配置方案
 $_ENV['Surge2_DefaultProfiles']     = 'default';                    //Surge2 默认配置方案
@@ -164,7 +152,6 @@ $_ENV['auto_detect_ban_allow_users'] = [];          // 审计封禁的例外用�
 //   - 1 = 仁慈模式，每触碰多少次封禁一次
 //   - 2 = 疯狂模式，累计触碰次数按阶梯进行不同时长的封禁
 $_ENV['auto_detect_ban_type']        = 1;
-
 $_ENV['auto_detect_ban_number']      = 30;             // 仁慈模式每次执行封禁所需的触发次数
 $_ENV['auto_detect_ban_time']        = 60;             // 仁慈模式每次封禁的时长 (分钟)
 
@@ -195,13 +182,12 @@ $_ENV['auto_detect_ban'] = [
 //Bot 设置--------------------------------------------------------------------------------------------
 # Telegram BOT
 $_ENV['enable_telegram']                    = false;        //是否开启Telegram bot
-
 $_ENV['use_new_telegram_bot']               = true;         //是否使用新的 Telegram Bot
 $_ENV['telegram_token']                     = '';           //Telegram bot,bot 的 token ，跟 father bot 申请
 $_ENV['telegram_chatid']                    = '';           //Telegram bot,群组会话 ID,把机器人拉进群里之后跟他 /ping 一下即可得到
 $_ENV['telegram_bot']                       = '_bot';       //Telegram 机器人账号
 $_ENV['telegram_group_quiet']               = false;        //Telegram 机器人在群组中不回应
-$_ENV['telegram_request_token']             = '';           //Telegram 机器人请求Key，随意设置，由大小写英文和数字组成，更新这个参数之后请 php xcat setTelegram
+$_ENV['telegram_request_token']             = '';           //Telegram 机器人请求Key，随意设置，由大小写英文和数字组成，更新这个参数之后请 php xcat Tool setTelegram
 
 # 通用
 $_ENV['finance_public']                     = true;         //财务报告是否向群公开
@@ -255,9 +241,10 @@ $_ENV['telegram_general_terms']             = '服务条款.';                  
 
 
 //沟通设置--------------------------------------------------------------------------------------------
-#客服系统设置，注册地址 https://www.mylivechat.com
-$_ENV['enable_mylivechat']    = false;   //是否开启客服系统
-$_ENV['mylivechat_id']        = '';      //客服系统ID
+$_ENV['live_chat']            = 'none';   //是否开启客服系统 none  crisp  mylivechat
+$_ENV['mylivechat_id']        = '';      //客服系统ID，注册地址 https://www.mylivechat.com
+$_ENV['crisp_id']             = '';      //客服系统ID，注册地址 https://crisp.chat/en/
+$_ENV['tawk_id']              = '';      //客服系统ID，注册地址 https://tawk.to/
 
 # PushBear  基于微信模板的向关注了二维码的用户以微信方式推送消息 https://pushbear.ftqq.com/，目前仅用户推送新公告
 $_ENV['usePushBear']          = false;
@@ -293,7 +280,7 @@ $_ENV['enable_checkin_captcha'] = false;        //启用签到验证码
 
 
 //支付系统设置----------------------------------------------------------------------------------------
-#取值 none | codepay | f2fpay | chenAlipay | paymentwall | spay |tomatopay | payjs | yftpay
+#取值 none | codepay | f2fpay | chenAlipay | paymentwall | spay | payjs | yftpay
 $_ENV['payment_system']       = 'none';
 
 #yft支付设置
@@ -337,21 +324,6 @@ $_ENV['bitpay_secret']        = '';
 $_ENV['payjs_mchid']          = '';
 $_ENV['payjs_key']            = '';
 
-#tomatopay番茄云支付
-#使用教程:https://swapidc.fanqieui.com/?t/329.html  tg群 https://t.me/fanqiepay
-$_ENV['tomatopay'] = [
-    'wxpay'  => [
-        'mchid'               => '',    // 商户号
-        'account'             => '',    //您在番茄云支付的登录邮箱
-        'token'               => ''     // 安全验证码
-    ],
-    'alipay' => [
-        'mchid'               => '',    // 商户号
-        'account'             => '',    //您在番茄云支付的登录邮箱
-        'token'               => ''     // 安全验证码
-    ],
-];
-
 
 //其他面板显示设置------------------------------------------------------------------------------------------
 $_ENV['old_index_DESC']       = '<p>够了，我无法忍受你的行为，现在你将成为我们中的一员</p>';	    //旧版本首页的文字讯息
@@ -360,7 +332,7 @@ $_ENV['old_index_DESC']       = '<p>够了，我无法忍受你的行为，现�
 $_ENV['use_this_doc']         = false;	    //使用此文档
 $_ENV['enable_documents']     = false;	    //是否允许未登陆用户查看文档中心
 $_ENV['documents_name']       = $_ENV['appName'] . ' 文档中心';	    //文档中心名称
-$_ENV['remote_documents']     = true;	    //是否从远程加载文档中心，否的话请执行 php xcat initdocuments
+$_ENV['remote_documents']     = true;	    //是否从远程加载文档中心，否的话请执行 php xcat Tool initdocuments
 $_ENV['documents_source']     = 'https://raw.githubusercontent.com/GeekQu/PANEL_DOC/master/SSPanel';	    //远程文档加载地址
 
 #后台商品列表 销量统计
@@ -455,7 +427,7 @@ $_ENV['userCenterClient']     = [
 
 
 //新旧首页设置--------------------------------------------------------------------------------------------
-$_ENV['newIndex'] = true;	//使用新的 Node.js 开发的首页请填写 true，其他值为使用先前的首页，如您使用其他主题请保持 true
+$_ENV['newIndex'] = false;	//使用新的 Node.js 开发的首页请填写 true，其他值为使用先前的首页，如您使用其他主题请保持 true
 
 
 //节点检测-----------------------------------------------------------------------------------------------
@@ -480,6 +452,12 @@ $_ENV['v2ray_level']    = 0;
 
 
 //以下所有均为高级设置（一般用不上，不用改---------------------------------------------------------------------
+
+// 主站是否提供 WebAPI
+// - 为了安全性，推荐使用 WebAPI 模式对接节点并关闭公网数据库连接。
+// - 如果您全部节点使用数据库连接或者拥有独立的 WebAPI 站点或 Seed，则可设为 false。
+$_ENV['WebAPI']     = true;
+
 #杂项
 $_ENV['authDriver']             = 'cookie';            //不能更改此项
 $_ENV['pwdMethod']              = 'md5';               //密码加密 可选 md5, sha256, bcrypt, argon2i, argon2id（argon2i需要至少php7.2）
@@ -488,11 +466,11 @@ $_ENV['sessionDriver']          = 'cookie';            //可选: cookie,redis
 $_ENV['cacheDriver']            = 'cookie';            //可选: cookie,redis
 $_ENV['tokenDriver']            = 'db';                //可选: db,redis
 
-$_ENV['enable_login_bind_ip']   = true;        //是否将登陆线程和IP绑定
+$_ENV['enable_login_bind_ip']   = false;        //是否将登陆线程和IP绑定
 $_ENV['rememberMeDuration']     = 7;           //登录时记住账号时长天数
 $_ENV['Speedtest_duration']     = 6;           //显示多长时间的测速记录
 
-$_ENV['login_warn']             = true;                  //异地登陆提示
+$_ENV['login_warn']             = false;                  //异地登陆提示
 $_ENV['timeZone']               = 'PRC';                 //PRC 天朝时间  UTC 格林时间
 $_ENV['theme']                  = 'material';            //默认主题
 $_ENV['jump_delay']             = 1200;                  //跳转延时，单位ms，不建议太长
@@ -547,29 +525,5 @@ foreach ($_ENV['cdn_forwarded_ip'] as $cdn_forwarded_ip) {
     }
 }
 
-// make replace _ENV with env
-function findKeyName($name)
-{
-    global $_ENV;
-    foreach ($_ENV as $configKey => $configValue) {
-        if (strtoupper($configKey) == $name) {
-            return $configKey;
-        }
-    }
-
-    return NULL;
-}
-
-foreach (getenv() as $envKey => $envValue) {
-    global $_ENV;
-    $envUpKey = strtoupper($envKey);
-    // Key starts with UIM_
-    if (substr($envUpKey, 0, 4) == "UIM_") {
-        // Vaild env key, set to _ENV
-        $configKey = substr($envUpKey, 4);
-        $realKey = findKeyName($configKey);
-        if ($realKey != NULL) {
-            $_ENV[$realKey] = $envValue;
-        }
-    }
-}
+// https://sentry.io for production debugging
+$_ENV['sentry_dsn'] = '';

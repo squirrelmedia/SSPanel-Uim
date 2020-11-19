@@ -21,7 +21,6 @@
 <div class="card-inner">
     <div class="form-group pull-left">
         <p class="modal-title">本站支持支付宝/微信在线充值</p>
-
         {if preg_match('/\|/', $config['Pay_Price'])}
             {$data = explode('|', $config['Pay_Price'])}
             <p>选择充值金额：</p>
@@ -38,7 +37,6 @@
             </div>
         {/if}
     </div>
-
     {if $config['AliPay_Status']==1}
         <a class="btn btn-flat waves-attach" id="urlChangeAliPay" type="1">
             <img src="/images/alipay.jpg" width="45">
@@ -50,7 +48,6 @@
         </a>
     {/if}
 </div>
-
 <div aria-hidden="true" class="modal modal-va-middle fade" id="AliPayReadyToPay" role="dialog" tabindex="-1">
     <div class="modal-dialog modal-xs">
         <div class="modal-content">
@@ -74,7 +71,6 @@
         </div>
     </div>
 </div>
-
 <script>
     function chenPayLoad() {
         var $alipay = 'alipays://platformapi/startapp?saId=10000007&clientVersion=3.7.0.0718&qrcode=',
@@ -82,7 +78,7 @@
                 $pay_type = 0,
                 $order_id = 0,
                 qrcode = new QRCode(document.getElementById("qrcode"));
-
+        var flag = false;
         if ('{$QRcodeUrl}'.indexOf('|') > 0) {
             var $alipayUrl = '{$QRcodeUrl}'.split('|'),
                     $wxpayUrl = '{$WxQRcodeUrl}'.split('|');
@@ -90,7 +86,6 @@
             var $alipayUrl = '{$QRcodeUrl}',
                     $wxpayUrl = '{$WxQRcodeUrl}';
         }
-
         $("#AliPayType").val($('.btn-price:first-child').attr('price'));
         $(".btn-price").click(function () {
             $pay_type = $(this).attr('type');
@@ -135,9 +130,14 @@
                         $id = setInterval(function () {
                             getCountdown()
                         }, 1000);
-                        setTimeout(function () {
-                            checkPayTime(data.id)
-                        }, 1000);
+                        if(flag == false){
+                            setTimeout(function () {
+                                checkPayTime(data.id)
+                            }, 1000);
+                            flag = true;
+                        }else{
+                            return 0;
+                        }
                         if (data.url) {
                             if ($type == 2) {
                                 $('.pay').attr('href', $wxpayApp);
@@ -173,7 +173,6 @@
                     checkPayTime(id)
                 }, 3000); //循环调用触发setTimeout
             }
-
             function AliPayDelete(id) {
                 $.ajax({
                     type: "GET",
@@ -198,7 +197,6 @@
                     $('.pay').attr('href', '').children('img').attr('src', '/images/loading.gif');
                 }
             });
-
             function close($msg) {
                 if (CheckPayTimeId) {
                     clearTimeout(CheckPayTimeId);
@@ -211,7 +209,6 @@
                 $("#result").modal();
                 $$.getElementById('msg').innerHTML = $msg;
             }
-
             var m = 2,
                     s = 59,
                     countdown = document.getElementById("countTime");

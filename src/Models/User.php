@@ -8,10 +8,12 @@ use App\Utils\{
     GA,
     QQWry,
     Radius,
+    Telegram,
     URL
 };
-use App\Services\Config;
+use App\Services\{Config, Mail};
 use Ramsey\Uuid\Uuid;
+use Exception;
 
 /**
  * User Model
@@ -42,12 +44,13 @@ class User extends Model
         'is_admin'        => 'boolean',
         'is_multi_user'   => 'int',
         'node_speedlimit' => 'float',
+        'sendDailyMail'   => 'int'
     ];
 
     public function getGravatarAttribute()
     {
         $hash = md5(strtolower(trim($this->attributes['email'])));
-        return 'https://gravatar.loli.net/avatar/' . $hash . "?&d=identicon";
+        return 'https://cdn.v2ex.com/gravatar/' . $hash . "?&d=identicon";
     }
 
     public function isAdmin()
@@ -141,10 +144,15 @@ class User extends Model
 
     public function getUuid()
     {
-        return Uuid::uuid3(
-            Uuid::NAMESPACE_DNS,
-            $this->attributes['id'] . '|' . $this->attributes['passwd']
-        )->toString();
+        $uuid = $this->attributes['uuid'];
+        if ($uuid == '') {
+            $uuid =  Uuid::uuid3(
+                Uuid::NAMESPACE_DNS,
+                $this->attributes['id'] . '|' . $this->attributes['passwd']
+            )->toString();
+        }
+        
+        return $uuid;
     }
 
     /*
@@ -475,10 +483,10 @@ class User extends Model
                 $number = Code::whereDate('usedatetime', '=', date('Y-m-d'))->sum('number');
                 break;
             case "this month":
-                $number = Code::whereMonth('usedatetime', '=', date('m'))->sum('number');
+                $number = Code::whereYear('usedatetime','=',date('Y'))->whereMonth('usedatetime', '=', date('m'))->sum('number');
                 break;
             case "last month":
-                $number = Code::whereMonth('usedatetime', '=', date('m', strtotime('last month')))->sum('number');
+                $number = Code::whereYear('usedatetime','=',date('Y'))->whereMonth('usedatetime', '=', date('m', strtotime('last month')))->sum('number');
                 break;
             default:
                 $number = Code::sum('number');
@@ -847,5 +855,116 @@ class User extends Model
             $codeq->userid      = $this->id;
             $codeq->save();
         }
+    }
+
+    /**
+     * 发送邮件
+     *
+     * @param string $subject
+     * @param string $template
+     * @param array  $ary
+     * @param array  $files
+     */
+    public function sendMail(string $subject, string $template, array $ary = [], array $files = [],$is_queue = false): bool
+    {
+        $result = false;
+        if($is_queue){
+            $new_emailqueue = new EmailQueue;
+            $new_emailqueue->to_email = $this->email;
+            $new_emailqueue -> subject = $subject;
+            $new_emailqueue->template = $template;
+            $new_emailqueue->time = time();
+            $new_emailqueue->array = json_encode($ary);
+            $new_emailqueue->save();
+            return true;
+        }
+        // 验证邮箱地址是否正确
+        if (filter_var($this->email, FILTER_VALIDATE_EMAIL)) {
+            // 发送邮件
+            try {
+                Mail::send(
+                    $this->email,
+                    $subject,
+                    $template,
+                    array_merge(
+                        [
+                            'user' => $this
+                        ],
+                        $ary
+                    ),
+                    $files
+                );
+                $result = true;
+            } catch (Exception $e) {
+                echo $e->getMessage();
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * 发送 Telegram 讯息
+     *
+     * @param string $text
+     */
+    public function sendTelegram(string $text): bool
+    {
+        $result = false;
+        if ($this->telegram_id > 0) {
+            Telegram::Send(
+                $text,
+                $this->telegram_id
+            );
+            $result = true;
+        }
+        return $result;
+    }
+
+    /**
+     * 发送每日流量报告
+     *
+     * @param string $ann 公告
+     */
+    public function sendDailyNotification(string $ann = ''): void
+    {
+        $lastday = (($this->u + $this->d) - $this->last_day_t) / 1024 / 1024;
+        switch ($this->sendDailyMail) {
+            case 0:
+                return;
+            case 1:
+                echo 'Send daily mail to user: ' . $this->id;
+                    $this->sendMail(
+                    $_ENV['appName'] . '-每日流量报告以及公告',
+                    'news/daily-traffic-report.tpl',
+                    [
+                        'user'    => $this,
+                        'text'    => '下面是系统中目前的公告:<br><br>' . $ann . '<br><br>晚安！',
+                        'lastday' => $lastday
+                    ],
+                    []
+                );
+                break;
+            case 2:
+                echo 'Send daily Telegram message to user: ' . $this->id;
+                $text  = date('Y-m-d') . ' 流量使用报告' . PHP_EOL . PHP_EOL;
+                $text .= '流量总计：' . $this->enableTraffic() . PHP_EOL;
+                $text .= '已用流量：' . $this->usedTraffic() . PHP_EOL;
+                $text .= '剩余流量：' . $this->unusedTraffic() . PHP_EOL;
+                $text .= '今日使用：' . $lastday . 'MB';
+                $this->sendTelegram(
+                    $text
+                );
+                break;
+        }
+    }
+
+    /**
+     * 获取转发规则
+     */
+    public function getRelays()
+    {
+        return (!Tools::is_protocol_relay($this)
+            ? []
+            : Relay::where('user_id', $this->id)->orwhere('user_id', 0)->orderBy('id', 'asc')->get());
     }
 }
